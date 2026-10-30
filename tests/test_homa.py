@@ -26,6 +26,13 @@ def test_ideal_benzene_is_one():
     assert missing == []
 
 
+def test_published_benzene_value():
+    """Krygowski & Szatylowicz, ChemTexts 2015, Table 4: HOMA 0.979, EN 0.021, GEO 0.000."""
+    value, en, geo, *_ = homa.ring_homa(["C"] * 6, _hexagon([1.397] * 6))
+    assert round(value, 3) == 0.979
+    assert round(en, 3) == 0.021 and round(geo, 3) == 0.0
+
+
 def test_uniform_elongation_is_all_en():
     coords = _hexagon([1.397] * 6)
     value, en, geo, *_ = homa.ring_homa(["C"] * 6, coords)
