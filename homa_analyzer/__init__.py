@@ -18,7 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = "HOMA Analyzer"
-PLUGIN_VERSION = "0.1.1"
+PLUGIN_VERSION = "0.1.2"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Compute the HOMA aromaticity index of each ring in the 3D structure, "

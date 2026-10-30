@@ -14,6 +14,8 @@ import homa_analyzer
 from homa_analyzer import panel as panel_mod
 from homa_analyzer.settings import default_settings
 
+_REAL_HOST_SYNCS_METHOD = panel_mod.host_syncs_method  # before the autouse patch
+
 
 class FakePlotter:
     """Records what the panel adds; like pyvista, a scalar bar is keyed by title."""
@@ -87,6 +89,12 @@ def _benzene():
 
 def _labels(plotter):
     return sorted(n for n in plotter.actors if n.startswith(panel_mod.LABEL_ACTOR))
+
+
+@pytest.fixture(autouse=True)
+def older_host(monkeypatch):
+    """Panel tests describe a host before 5.1.2 unless they say otherwise."""
+    monkeypatch.setattr(panel_mod, "host_syncs_method", lambda version=None: False)
 
 
 @pytest.fixture
@@ -347,7 +355,7 @@ def test_open_panel_replaces_a_deleted_dock(qapp):
 
 
 def test_metadata():
-    assert homa_analyzer.PLUGIN_VERSION == "0.1.1"
+    assert homa_analyzer.PLUGIN_VERSION == "0.1.2"
     assert homa_analyzer.PLUGIN_CATEGORY == "Analysis"
     assert "numpy" in homa_analyzer.PLUGIN_DEPENDENCIES
 
@@ -442,7 +450,7 @@ def test_plugin_label_is_dropped_when_the_structure_is_replaced(make_panel):
 
 
 def test_tracker_rules():
-    t = panel_mod.MethodTracker()
+    t = panel_mod.MethodTracker(trust_host=False)
     tagged, plain, other = _benzene(), _benzene(), _benzene()
     tagged.SetProp(panel_mod.HOST_OPT_TAG, "UFF_RDKIT")
     assert t.effective(tagged, "UFF (RDKit)") == "UFF (RDKit)"
@@ -454,3 +462,61 @@ def test_tracker_rules():
     assert t.effective(other, "PMEFF (v1)") is None
     assert t.effective(other, "GFN2-xTB") == "GFN2-xTB"
     assert t.effective(object(), "x (RDKit)") is None  # not an RDKit molecule
+
+
+def test_host_5_1_2_label_is_trusted_after_redo_or_project_load(
+    make_panel, monkeypatch
+):
+    """Undo/redo and project files drop the RDKit tag; 5.1.2 keeps the label right."""
+    monkeypatch.setattr(panel_mod, "host_syncs_method", lambda version=None: True)
+    untagged = _benzene()  # as rebuilt from a snapshot or a .pmeprj
+    p, _ = make_panel()
+    p.context.current_mol = untagged
+    p.context.mw.compute_manager.last_successful_optimization_method = "MMFF94s (RDKit)"
+    p.refresh()
+    assert not p.warning_label.isHidden()
+    assert "MMFF94s (RDKit)" in p.warning_label.text()
+
+
+def test_tracker_trusting_the_host():
+    t = panel_mod.MethodTracker(trust_host=True)
+    a, b = _benzene(), _benzene()
+    assert t.effective(a, "UFF (RDKit)") == "UFF (RDKit)"  # untagged, still trusted
+    assert t.effective(b, "UFF (RDKit)") == "UFF (RDKit)"  # replaced, host said so
+    assert t.effective(a, None) is None
+    assert t.effective(None, "UFF (RDKit)") is None
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("5.1.2", (5, 1, 2)),
+        ("5.2.0rc1", (5, 2, 0)),
+        ("6.0", (6, 0)),
+        ("5.1.2.dev3", (5, 1, 2)),
+        ("dev", None),
+    ],
+)
+def test_host_version_parsing(monkeypatch, text, expected):
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: text)
+    assert panel_mod.host_version() == expected
+
+
+def test_host_version_when_not_installed(monkeypatch):
+    import importlib.metadata
+
+    def missing(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", missing)
+    assert panel_mod.host_version() is None
+
+
+@pytest.mark.parametrize(
+    "version, syncs",
+    [((5, 1, 1), False), ((5, 1, 2), True), ((5, 2, 0), True), ((6, 0), True)],
+)
+def test_host_syncs_method_from_5_1_2(version, syncs):
+    assert _REAL_HOST_SYNCS_METHOD(version) is syncs

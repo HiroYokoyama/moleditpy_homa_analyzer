@@ -66,25 +66,62 @@ def _has_host_tag(mol) -> bool:
         return False
 
 
+# MoleditPy 5.1.2 clears the label when the structure is replaced and carries
+# it through undo/redo and project files, so from then on it can be trusted.
+HOST_SYNCS_METHOD = (5, 1, 2)
+
+
+def host_version():
+    """The installed MoleditPy version as a tuple of ints, or None if unknown."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        text = version("moleditpy")
+    except PackageNotFoundError:  # run from a source checkout, not installed
+        return None
+    parts = []
+    for piece in text.split(".")[:3]:
+        digits = ""
+        for ch in piece:
+            if not ch.isdigit():
+                break
+            digits += ch
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
+
+
+def host_syncs_method(version=None) -> bool:
+    version = host_version() if version is None else version
+    return version is not None and tuple(version) >= HOST_SYNCS_METHOD
+
+
 class MethodTracker:
     """Decides whether the host's last optimization label belongs to this molecule.
 
-    MoleditPy keeps ``last_successful_optimization_method`` when a new structure
-    is loaded, so the label of the previous molecule's optimization carries
-    over.  The host's own RDKit optimizations tag the molecule they produce, so
-    an "(RDKit)" label on an untagged molecule is stale.  Any other label is
-    tied to the molecule that was current when it changed, and dropped once
-    that molecule is replaced (optimizer plugins and the constrained optimizer
-    edit the current molecule in place).
+    From MoleditPy 5.1.2 the host keeps the label in step with the structure,
+    so it is taken as it is.  Older hosts keep ``last_successful_optimization_method``
+    when a new structure is loaded, so the label of the previous molecule's
+    optimization carries over.  For them: the host's own RDKit optimizations
+    tag the molecule they produce, so an "(RDKit)" label on an untagged
+    molecule is stale.  Any other label is tied to the molecule that was
+    current when it changed, and dropped once that molecule is replaced
+    (optimizer plugins and the constrained optimizer edit the current molecule
+    in place).  The tag does not survive undo/redo or a project file, so on an
+    older host an optimized structure restored that way shows no warning.
     """
 
-    def __init__(self):
+    def __init__(self, trust_host=None):
+        self.trust_host = host_syncs_method() if trust_host is None else trust_host
         self._label = None
         self._mol_id = None
 
     def effective(self, mol, label):
         if not label or mol is None:
             return label if mol is not None else None
+        if self.trust_host:
+            return label
         if _has_host_tag(mol):
             return label
         if label.endswith("(RDKit)"):

@@ -101,10 +101,15 @@ The method is recognized by name: MMFF, UFF, GAFF, Ghemical, PMEFF and constrain
 which covers MoleditPy's own force fields and the Open Babel Optimizer and PMEFF plugins. A force
 field added later by a plugin under another name is not recognized.
 
-MoleditPy keeps the last method when a new structure is loaded, so the panel checks that the method
-belongs to the structure on screen: MoleditPy's own optimizations tag the molecule they produce,
-and any other method is tied to the structure that was current when it ran. A structure loaded
-after an optimization therefore shows no warning.
+From MoleditPy 5.1.2 the recorded method follows the structure: loading another structure clears
+it, and undo/redo and project files carry it. The panel takes it as it is.
+
+MoleditPy 5.1.1 and earlier keep the last method when a new structure is loaded, so there the panel
+checks that the method belongs to the structure on screen: MoleditPy's own optimizations tag the
+molecule they produce, and any other method is tied to the structure that was current when it ran.
+A structure loaded after an optimization therefore shows no false warning. The tag does not
+survive undo/redo or a project file, so on those versions a force-field structure restored by redo
+or opened from a `.pmeprj` shows no warning.
 
 ## Method
 
