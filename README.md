@@ -1,7 +1,9 @@
 # HOMA Analyzer
 
 [![CI](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/actions/workflows/test.yml/badge.svg)](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/actions/workflows/test.yml)
+![Test Coverage](https://img.shields.io/badge/coverage->90%25-green)
 [![GitHub tag](https://img.shields.io/github/v/tag/HiroYokoyama/moleditpy_homa_analyzer?label=version)](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/tags)
+[![GitHub Downloads](https://img.shields.io/github/downloads/HiroYokoyama/moleditpy_homa_analyzer/total)](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/releases)
 ![License](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue)
 
 A [MoleditPy](https://github.com/HiroYokoyama/python_molecular_editor) plugin that computes the
