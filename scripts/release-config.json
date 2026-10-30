@@ -1,0 +1,19 @@
+{
+  "source": "homa_analyzer/__init__.py",
+  "title": "HOMA Analyzer",
+  "package": "homa_analyzer",
+  "archive": "homa_analyzer_{version}.zip",
+  "assets": [
+    "homa_analyzer_{version}.zip"
+  ],
+  "include": [
+    "README.md",
+    "LICENSE",
+    "COPYING",
+    "LICENSING.md"
+  ],
+  "exclude": [
+    "*/__pycache__/*",
+    "*/.git/*"
+  ]
+}
