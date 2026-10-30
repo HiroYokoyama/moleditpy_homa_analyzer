@@ -14,8 +14,8 @@ in a panel on the right, and exports the ring list and every ring bond length as
 
 ![HOMA Analyzer: phenanthrene with HOMA labels, gradient spheres, legend and the middle ring highlighted](img/homa_analyzer.png)
 
-*Phenanthrene after MMFF94s optimization, so the force-field warning is shown. The middle ring is
-selected in the table and highlighted in 3D.*
+*Phenanthrene optimized with r2SCAN-3c in ORCA and loaded from the `.xyz` file, with gradient
+spheres switched on. The middle ring is selected in the table and highlighted in 3D.*
 
 ## Usage
 
@@ -93,8 +93,18 @@ HOMA is computed from bond lengths, so it is only as good as the geometry. The p
 method MoleditPy recorded for the last successful optimization of the structure, and shows a
 warning when that method is a force field (MMFF94, MMFF94s, UFF, GAFF, Ghemical, PMEFF or a
 constrained force-field optimization) or when the structure was embedded without optimization.
-Force fields reproduce conjugated bond lengths only roughly, which shifts HOMA noticeably. No
+Force fields reproduce conjugated bond lengths only roughly, which shifts HOMA noticeably. For
+phenanthrene, r2SCAN-3c gives the middle ring HOMA 0.535; MMFF94s gives 0.788 and UFF 0.803. No
 warning is shown for structures loaded from a file, or optimized by a quantum-chemical plugin.
+
+The method is recognized by name: MMFF, UFF, GAFF, Ghemical, PMEFF and constrained optimizations,
+which covers MoleditPy's own force fields and the Open Babel Optimizer and PMEFF plugins. A force
+field added later by a plugin under another name is not recognized.
+
+MoleditPy keeps the last method when a new structure is loaded, so the panel checks that the method
+belongs to the structure on screen: MoleditPy's own optimizations tag the molecule they produce,
+and any other method is tied to the structure that was current when it ran. A structure loaded
+after an optimization therefore shows no warning.
 
 ## Method
 
@@ -141,6 +151,17 @@ against the literature and Crossref DOI records. The test suite reproduces the p
 for benzene with all C–C bonds at 1.397 Å: HOMA 0.979, EN 0.021, GEO 0.000 ([3], Table 4). It also
 checks a B3LYP/def2-SVP benzene geometry from an ORCA optimization (all C–C 1.3991 Å), which gives
 HOMA 0.968, EN 0.032 and GEO 0.000.
+
+The tests also include two geometries optimized for this plugin with ORCA 6.1.1 at r2SCAN-3c:
+
+| Molecule | Ring | HOMA | EN | GEO | Published [3], Table 4 |
+| :--- | :--- | ---: | ---: | ---: | :--- |
+| Naphthalene | each ring | 0.812 | 0.061 | 0.127 | 0.802 (EN 0.077, GEO 0.121) |
+| Phenanthrene | outer rings | 0.885 | 0.040 | 0.075 | |
+| Phenanthrene | middle ring | 0.535 | 0.246 | 0.219 | |
+
+The naphthalene value is within 0.01 of the published one. Phenanthrene shows the expected pattern:
+the outer rings are benzene-like and the middle ring is much less aromatic.
 
 ### References
 

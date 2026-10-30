@@ -206,3 +206,48 @@ def test_bond_rows_leave_unparameterized_bonds_blank():
     rows = homa.bond_rows([ring])
     assert rows[1][4] == "C-Si" and rows[1][6:] == ["", "", ""]
     assert rows[3][4] == "C-C" and rows[3][7] == "257.7"
+
+
+def _xyz_mol(name):
+    from pathlib import Path
+
+    from rdkit import Chem
+    from rdkit.Chem import rdDetermineBonds
+
+    mol = Chem.MolFromXYZFile(str(Path(__file__).parent / "data" / name))
+    rdDetermineBonds.DetermineBonds(mol, charge=0)
+    return mol
+
+
+def test_r2scan3c_naphthalene_matches_the_literature():
+    """r2SCAN-3c naphthalene; Krygowski & Szatylowicz, ChemTexts 2015, Table 4
+    give HOMA 0.802 (EN 0.077, GEO 0.121)."""
+    pytest.importorskip("rdkit")
+    rings = homa.analyze_mol(_xyz_mol("naphthalene_r2scan3c.xyz"))
+    assert len(rings) == 2
+    for ring in rings:
+        assert round(ring.homa, 3) == 0.812
+        assert ring.homa == pytest.approx(0.802, abs=0.02)
+        assert ring.homa == pytest.approx(1 - ring.en - ring.geo)
+
+
+def test_r2scan3c_phenanthrene_middle_ring_is_least_aromatic():
+    pytest.importorskip("rdkit")
+    rings = homa.analyze_mol(_xyz_mol("phenanthrene_r2scan3c.xyz"))
+    values = sorted(round(r.homa, 3) for r in rings)
+    assert values == [0.535, 0.885, 0.885]
+    middle = min(rings, key=lambda r: r.homa)
+    assert middle.geo > 0.2 and middle.en > 0.2  # both alternation and elongation
+
+
+# Labels exactly as the optimizer plugins register them:
+# moleditpy_openbabel_optimizer: f"{method} (Open Babel)" for its FORCE_FIELDS,
+# moleditpy_pmeff-plugin: f"PMEFF (v{PLUGIN_VERSION})".
+@pytest.mark.parametrize(
+    "label",
+    [f"{ff} (Open Babel)" for ff in ("MMFF94s", "MMFF94", "UFF", "GAFF", "Ghemical")]
+    + ["PMEFF (v0.3.2)", "Constrained_MMFF94s", "Constrained_UFF"],
+)
+def test_optimizer_plugin_labels_warn(label):
+    warning = homa.geometry_warning(label)
+    assert warning is not None and label in warning

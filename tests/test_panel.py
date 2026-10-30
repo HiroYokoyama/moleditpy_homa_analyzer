@@ -94,6 +94,8 @@ def make_panel(qapp):
     made = []
 
     def make(mol=None, method=None, **overrides):
+        if mol is not None and method and method.endswith("(RDKit)"):
+            mol.SetProp(panel_mod.HOST_OPT_TAG, "MMFF_RDKIT")  # as the host does
         ctx = FakeContext(mol, method)
         settings = default_settings()
         settings.update(overrides)
@@ -345,7 +347,7 @@ def test_open_panel_replaces_a_deleted_dock(qapp):
 
 
 def test_metadata():
-    assert homa_analyzer.PLUGIN_VERSION == "0.1.0"
+    assert homa_analyzer.PLUGIN_VERSION == "0.1.1"
     assert homa_analyzer.PLUGIN_CATEGORY == "Analysis"
     assert "numpy" in homa_analyzer.PLUGIN_DEPENDENCIES
 
@@ -412,3 +414,43 @@ def test_unparameterized_ring_can_be_highlighted(make_panel):
     ctx.plotter.clear()
     p._poll()
     assert panel_mod.HIGHLIGHT_ACTOR in ctx.plotter.actors
+
+
+def test_stale_rdkit_label_on_a_loaded_structure(make_panel):
+    """The host keeps the previous molecule's label when a file is loaded."""
+    p, ctx = make_panel(_benzene(), "MMFF94s (RDKit)")
+    p.show()
+    p.refresh()
+    assert not p.warning_label.isHidden()
+    ctx.current_mol = _benzene()  # loaded from a file: no host tag, same label
+    p._poll()
+    assert p.warning_label.isHidden()
+    assert "none recorded" in p.method_label.text()
+
+
+def test_plugin_label_is_dropped_when_the_structure_is_replaced(make_panel):
+    mol = _benzene()
+    p, ctx = make_panel(mol)
+    p.show()
+    p.refresh()
+    ctx.mw.compute_manager.last_successful_optimization_method = "GAFF (Open Babel)"
+    p._poll()  # the plugin optimized the current molecule in place
+    assert "GAFF" in p.warning_label.text() and not p.warning_label.isHidden()
+    ctx.current_mol = _benzene()  # then a file was loaded
+    p._poll()
+    assert p.warning_label.isHidden()
+
+
+def test_tracker_rules():
+    t = panel_mod.MethodTracker()
+    tagged, plain, other = _benzene(), _benzene(), _benzene()
+    tagged.SetProp(panel_mod.HOST_OPT_TAG, "UFF_RDKIT")
+    assert t.effective(tagged, "UFF (RDKit)") == "UFF (RDKit)"
+    assert t.effective(plain, "UFF (RDKit)") is None
+    assert t.effective(plain, None) is None
+    assert t.effective(None, "PMEFF (v1)") is None
+    assert t.effective(plain, "PMEFF (v1)") == "PMEFF (v1)"
+    assert t.effective(plain, "PMEFF (v1)") == "PMEFF (v1)"
+    assert t.effective(other, "PMEFF (v1)") is None
+    assert t.effective(other, "GFN2-xTB") == "GFN2-xTB"
+    assert t.effective(object(), "x (RDKit)") is None  # not an RDKit molecule

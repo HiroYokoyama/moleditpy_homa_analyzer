@@ -38,6 +38,7 @@ from .settings import COLORMAPS
 
 logger = logging.getLogger(__name__)
 
+HOST_OPT_TAG = "_pme_optimization_method"
 LABEL_ACTOR = "homa_analyzer_label"
 SPHERE_ACTOR = "homa_analyzer_spheres"
 HIGHLIGHT_ACTOR = "homa_analyzer_highlight"
@@ -58,6 +59,42 @@ def last_optimization_method(main_window):
     return getattr(compute, "last_successful_optimization_method", None)
 
 
+def _has_host_tag(mol) -> bool:
+    try:
+        return bool(mol.HasProp(HOST_OPT_TAG))
+    except (AttributeError, RuntimeError, TypeError):  # not an RDKit molecule
+        return False
+
+
+class MethodTracker:
+    """Decides whether the host's last optimization label belongs to this molecule.
+
+    MoleditPy keeps ``last_successful_optimization_method`` when a new structure
+    is loaded, so the label of the previous molecule's optimization carries
+    over.  The host's own RDKit optimizations tag the molecule they produce, so
+    an "(RDKit)" label on an untagged molecule is stale.  Any other label is
+    tied to the molecule that was current when it changed, and dropped once
+    that molecule is replaced (optimizer plugins and the constrained optimizer
+    edit the current molecule in place).
+    """
+
+    def __init__(self):
+        self._label = None
+        self._mol_id = None
+
+    def effective(self, mol, label):
+        if not label or mol is None:
+            return label if mol is not None else None
+        if _has_host_tag(mol):
+            return label
+        if label.endswith("(RDKit)"):
+            return None
+        if label != self._label:
+            self._label, self._mol_id = label, id(mol)
+            return label
+        return label if id(mol) == self._mol_id else None
+
+
 def format_value(value, decimals: int) -> str:
     return "n/a" if value is None else f"{value:.{decimals}f}"
 
@@ -73,6 +110,7 @@ class HomaPanel(QWidget):
         self.results = []
         self.method = None
         self._signature = None
+        self._tracker = MethodTracker()
         self._actor_names = []
         self._legend_title = None
 
@@ -413,8 +451,9 @@ class HomaPanel(QWidget):
     def refresh(self) -> None:
         """Recompute HOMA for the current molecule and redraw table and overlay."""
         mol = self.context.current_mol if self.context is not None else None
-        self.method = last_optimization_method(self._main_window())
-        self._signature = (id(mol), self.method)
+        raw = last_optimization_method(self._main_window())
+        self.method = self._tracker.effective(mol, raw)
+        self._signature = (id(mol), raw)
         self.results = []
         try:
             self.results = analyze_mol(mol)
