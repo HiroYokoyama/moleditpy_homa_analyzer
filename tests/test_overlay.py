@@ -83,3 +83,14 @@ def test_legend_mesh_and_args():
     assert args["title"] == "HOMA" and args["fmt"] == "%.2f" and args["vertical"]
     flat = overlay.legend_args(dict(s, legend_vertical=False))
     assert flat["width"] > flat["height"]
+
+
+def test_ring_outline_closes_the_loop():
+    square = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    mesh = overlay.ring_outline([square], radius=0.1)
+    xmin, xmax, ymin, ymax, *_ = mesh.bounds
+    # Closed and symmetric: every side is tubed, including the last one back.
+    assert xmin == pytest.approx(ymin) == pytest.approx(-0.1, abs=0.01)
+    assert xmax == pytest.approx(ymax) and xmax > 1.05
+    two = overlay.ring_outline([square, [(5 + x, y, z) for x, y, z in square]])
+    assert two.bounds[1] > 5.9

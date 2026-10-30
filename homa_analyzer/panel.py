@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 
 LABEL_ACTOR = "homa_analyzer_label"
 SPHERE_ACTOR = "homa_analyzer_spheres"
+HIGHLIGHT_ACTOR = "homa_analyzer_highlight"
+HIGHLIGHT_COLOR = "#ffd000"
 LEGEND_ACTOR = "homa_analyzer_legend"
 POLL_MS = 800
 COLUMNS = ["Ring", "Atoms", "Size", "HOMA", "EN", "GEO"]
@@ -91,6 +93,7 @@ class HomaPanel(QWidget):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.itemSelectionChanged.connect(self._selection_changed)
         layout.addWidget(self.table, 1)
 
         self.status_label = QLabel()
@@ -102,6 +105,9 @@ class HomaPanel(QWidget):
         self.refresh_button.clicked.connect(self.refresh)
         self.export_button = QPushButton("Export CSV...")
         self.export_button.clicked.connect(self.export_csv)
+        self.clear_selection_button = QPushButton("Clear selection")
+        self.clear_selection_button.setEnabled(False)
+        self.clear_selection_button.clicked.connect(self.table.clearSelection)
         self.export_bonds_button = QPushButton("Export bond lengths...")
         self.export_bonds_button.setToolTip(
             "One row per ring bond, for the selected rings or, with none "
@@ -112,6 +118,12 @@ class HomaPanel(QWidget):
         buttons.addWidget(self.export_button)
         buttons.addWidget(self.export_bonds_button)
         layout.addLayout(buttons)
+        selection_row = QHBoxLayout()
+        self.selection_label = QLabel()
+        selection_row.addWidget(self.selection_label, 1)
+        selection_row.addWidget(self.clear_selection_button)
+        layout.addLayout(selection_row)
+        self._selection_changed(redraw=False)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_label_tab(), "Labels")
@@ -461,16 +473,20 @@ class HomaPanel(QWidget):
 
     def _wanted_actor_names(self):
         rings = self._shown_rings()
-        if not rings:
-            return []
         names = []
-        if self.settings["show_labels"]:
+        if rings and self.settings["show_labels"]:
             names += [f"{LABEL_ACTOR}-{r.index}" for r in rings]
-        if self.settings["show_spheres"]:
+        if rings and self.settings["show_spheres"]:
             names.append(SPHERE_ACTOR)
-        if self.settings["show_legend"] and self._uses_gradient():
+        if rings and self.settings["show_legend"] and self._uses_gradient():
             names.append(LEGEND_ACTOR)
+        if self._highlighted_rings():
+            names.append(HIGHLIGHT_ACTOR)
         return names
+
+    def _highlighted_rings(self):
+        rows = self._selected_rows()
+        return [self.results[r] for r in rows if r < len(self.results)]
 
     def clear_overlay(self, render: bool = True) -> None:
         plotter = self._plotter()
@@ -506,6 +522,18 @@ class HomaPanel(QWidget):
                 self._draw_labels(plotter, rings)
             if s["show_legend"] and rings and self._uses_gradient():
                 self._draw_legend(plotter, rings)
+            highlighted = self._highlighted_rings()
+            if highlighted:
+                plotter.add_mesh(
+                    overlay.ring_outline([r.coords for r in highlighted]),
+                    name=HIGHLIGHT_ACTOR,
+                    color=HIGHLIGHT_COLOR,
+                    opacity=0.9,
+                    smooth_shading=True,
+                    pickable=False,
+                    reset_camera=False,
+                )
+                self._actor_names.append(HIGHLIGHT_ACTOR)
             plotter.render()
         except Exception:
             logger.exception("HOMA Analyzer: could not draw the 3D overlay")
@@ -599,9 +627,23 @@ class HomaPanel(QWidget):
             path += ".csv"
         return self.write_csv(path)
 
+    def _selected_rows(self):
+        return sorted({i.row() for i in self.table.selectedIndexes()})
+
+    def _selection_changed(self, redraw: bool = True) -> None:
+        n = len(self._selected_rows())
+        self.clear_selection_button.setEnabled(bool(n))
+        self.selection_label.setText(
+            f"{n} ring(s) selected and highlighted; bond export uses them."
+            if n
+            else "No selection: bond export uses all rings."
+        )
+        if redraw:
+            self.draw_overlay()
+
     def selected_results(self):
         """Rings selected in the table, or every ring when none is selected."""
-        rows = sorted({i.row() for i in self.table.selectedIndexes()})
+        rows = self._selected_rows()
         if not rows:
             return list(self.results)
         return [self.results[r] for r in rows if r < len(self.results)]

@@ -106,6 +106,18 @@ def sphere_mesh(centers, radius: float, values=None):
     return mesh
 
 
+def ring_outline(rings, radius: float = 0.12):
+    """Tubes along the bonds of each ring, to highlight the selected rings."""
+    import pyvista as pv
+
+    mesh = None
+    for coords in rings:
+        loop = np.array(list(coords) + [coords[0]], dtype=float)
+        tube = pv.MultipleLines(points=loop).tube(radius=radius, n_sides=16)
+        mesh = tube if mesh is None else mesh.merge(tube)
+    return mesh
+
+
 def legend_mesh(position, settings: dict):
     """An invisible two-point mesh spanning the range, to carry the scalar bar."""
     import pyvista as pv

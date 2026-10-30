@@ -378,3 +378,37 @@ def test_bond_export_without_rings(make_panel, monkeypatch):
     )
     p, _ = make_panel(None)
     assert not p.export_bonds() and shown
+
+
+def test_selection_highlights_rings_in_3d(make_panel):
+    p, ctx = make_panel(_embed("c1ccc2[nH]ccc2c1"))
+    p.show()
+    p.refresh()
+    assert panel_mod.HIGHLIGHT_ACTOR not in ctx.plotter.actors
+    assert not p.clear_selection_button.isEnabled()
+    assert "all rings" in p.selection_label.text()
+    p.table.selectRow(0)
+    hl = ctx.plotter.meshes[panel_mod.HIGHLIGHT_ACTOR]
+    assert hl.kwargs["color"] == panel_mod.HIGHLIGHT_COLOR
+    ring = p.results[0]
+    lo = hl.mesh.bounds[0]
+    assert lo <= min(c[0] for c in ring.coords)  # the tube wraps the ring atoms
+    assert p.clear_selection_button.isEnabled()
+    assert "1 ring(s) selected" in p.selection_label.text()
+    ctx.plotter.clear()
+    p._poll()  # a host redraw brings the highlight back
+    assert panel_mod.HIGHLIGHT_ACTOR in ctx.plotter.actors
+    p.clear_selection_button.click()
+    assert panel_mod.HIGHLIGHT_ACTOR not in ctx.plotter.actors
+    assert not p.clear_selection_button.isEnabled()
+
+
+def test_unparameterized_ring_can_be_highlighted(make_panel):
+    p, ctx = make_panel(_embed("C1=CC=C[SiH2]1"))
+    p.show()
+    p.refresh()
+    p.table.selectRow(0)
+    assert panel_mod.HIGHLIGHT_ACTOR in ctx.plotter.actors
+    ctx.plotter.clear()
+    p._poll()
+    assert panel_mod.HIGHLIGHT_ACTOR in ctx.plotter.actors

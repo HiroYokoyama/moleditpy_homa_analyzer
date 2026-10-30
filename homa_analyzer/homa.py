@@ -47,6 +47,7 @@ class RingResult:
     en: float | None = None
     geo: float | None = None
     missing: list[str] = field(default_factory=list)  # bond types without parameters
+    coords: list = field(default_factory=list)  # atom positions, in ring order
 
     @property
     def size(self) -> int:
@@ -141,6 +142,7 @@ def analyze_mol(mol) -> list[RingResult]:
                 en=en,
                 geo=geo,
                 missing=missing,
+                coords=coords,
             )
         )
     return results
