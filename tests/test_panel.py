@@ -191,5 +191,5 @@ def test_initialize_and_open_panel(qapp, monkeypatch):
 
 
 def test_metadata():
-    assert homa_analyzer.PLUGIN_VERSION == "0.1.0"
+    assert homa_analyzer.PLUGIN_VERSION == "0.0.1"
     assert homa_analyzer.PLUGIN_CATEGORY == "Analysis"
