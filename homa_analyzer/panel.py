@@ -15,13 +15,16 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFontComboBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -94,11 +97,14 @@ class HomaPanel(QWidget):
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.itemSelectionChanged.connect(self._selection_changed)
-        layout.addWidget(self.table, 1)
+        top = QWidget()
+        top_layout = QVBoxLayout(top)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.addWidget(self.table, 1)
 
         self.status_label = QLabel()
         self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
+        top_layout.addWidget(self.status_label)
 
         buttons = QHBoxLayout()
         self.refresh_button = QPushButton("Recalculate")
@@ -117,19 +123,32 @@ class HomaPanel(QWidget):
         buttons.addWidget(self.refresh_button)
         buttons.addWidget(self.export_button)
         buttons.addWidget(self.export_bonds_button)
-        layout.addLayout(buttons)
+        top_layout.addLayout(buttons)
         selection_row = QHBoxLayout()
         self.selection_label = QLabel()
         selection_row.addWidget(self.selection_label, 1)
         selection_row.addWidget(self.clear_selection_button)
-        layout.addLayout(selection_row)
+        top_layout.addLayout(selection_row)
         self._selection_changed(redraw=False)
 
+        # The table and the style tabs share the height through a splitter, so
+        # the ring list is never squeezed to a couple of rows.
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_label_tab(), "Labels")
         self.tabs.addTab(self._build_sphere_tab(), "Spheres")
         self.tabs.addTab(self._build_gradient_tab(), "Gradient")
-        layout.addWidget(self.tabs)
+        tabs_scroll = QScrollArea()
+        tabs_scroll.setWidgetResizable(True)
+        tabs_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        tabs_scroll.setWidget(self.tabs)
+
+        self.splitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.addWidget(top)
+        self.splitter.addWidget(tabs_scroll)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+        layout.addWidget(self.splitter, 1)
 
         self.timer = QTimer(self)
         self.timer.setInterval(POLL_MS)

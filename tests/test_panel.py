@@ -114,7 +114,7 @@ def test_refresh_fills_table_and_labels(make_panel):
     assert p.table.item(0, 2).text() == "6"
     assert _labels(ctx.plotter) == [f"{panel_mod.LABEL_ACTOR}-1"]
     assert p.label_texts() == [p.table.item(0, 3).text()]
-    assert p.label_colors() == ["#d03000"]
+    assert p.label_colors() == ["#ffffff"]
     assert panel_mod.SPHERE_ACTOR not in ctx.plotter.actors  # off by default
     assert not ctx.plotter.scalar_bars  # fixed label color: no legend
     assert p.warning_label.isHidden()

@@ -1,5 +1,6 @@
 # HOMA Analyzer
 
+[![MoleditPy](https://img.shields.io/badge/MoleditPy-5.x-3577F7)](https://github.com/HiroYokoyama/python_molecular_editor)
 [![CI](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/actions/workflows/test.yml/badge.svg)](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/actions/workflows/test.yml)
 ![Test Coverage](https://img.shields.io/badge/coverage->90%25-green)
 [![GitHub tag](https://img.shields.io/github/v/tag/HiroYokoyama/moleditpy_homa_analyzer?label=version)](https://github.com/HiroYokoyama/moleditpy_homa_analyzer/tags)
@@ -8,8 +9,13 @@
 
 A [MoleditPy](https://github.com/HiroYokoyama/python_molecular_editor) plugin that computes the
 **HOMA** (Harmonic Oscillator Model of Aromaticity) index of every ring in the 3D structure. It
-shows the value at each ring center in the 3D view, lists the rings in a panel on the right, and
-exports the list as CSV.
+labels each ring center in the 3D view, optionally with a sphere colored by HOMA, lists the rings
+in a panel on the right, and exports the ring list and every ring bond length as CSV.
+
+![HOMA Analyzer: phenanthrene with HOMA labels, gradient spheres, legend and the middle ring highlighted](img/homa_analyzer.png)
+
+*Phenanthrene after MMFF94s optimization, so the force-field warning is shown. The middle ring is
+selected in the table and highlighted in 3D.*
 
 ## Usage
 
@@ -18,7 +24,10 @@ exports the list as CSV.
 2. Choose **Analysis ▸ HOMA Analyzer**. A panel opens on the right of the main window.
 3. Read the values in the panel or at the ring centers in the 3D view. The panel recalculates
    automatically when the structure is redrawn or re-optimized. **Recalculate** forces it.
-4. **Export CSV...** saves the list.
+4. Select rows in the table to highlight those rings in 3D. **Clear selection** removes the
+   selection.
+5. **Export CSV...** saves the ring list. **Export bond lengths...** saves one row per ring bond,
+   for the selected rings or, with nothing selected, for every ring.
 
 | Column | Meaning |
 | :--- | :--- |
@@ -28,22 +37,55 @@ exports the list as CSV.
 | HOMA | The HOMA index; *n/a* when a ring bond has no parameters (the tooltip names it) |
 | EN, GEO | The decomposition HOMA = 1 − EN − GEO, for rings whose bonds are all of one type |
 
-The CSV file also records the aromaticity flag from RDKit, every ring bond length and, in its
-first lines, the last optimization method and the geometry warning.
+Both CSV files start with the last optimization method and, if there is one, the geometry warning.
+The ring list adds RDKit's aromaticity flag and the ring's bond lengths. The bond-length file lists
+each bond's atoms, type, length, R<sub>opt</sub>, α and its term α(R<sub>opt</sub> − R)²/*n*, so
+1 minus the sum of a ring's terms is its HOMA.
 
-## 3D labels
+## 3D view options
 
-The **3D labels** box in the panel sets how the values appear at the ring centers. Changes apply
-immediately and are kept for later sessions.
+The tabs under the table set what the 3D view shows. Changes apply immediately and are kept for
+later sessions.
+
+**Labels**
 
 | Setting | Default |
 | :--- | :--- |
 | Show HOMA at ring centers | On |
-| Color | `#d03000` |
-| Font | Arial (Courier and Times are also available) |
+| Font | Arial (any installed font) |
 | Size | 18 pt |
-| Bold | On |
-| Decimals | 3 (also used in the table) |
+| Style | **B**old on; *I*talic and <u>U</u>nderline off |
+| Coloring | Fixed color, or HOMA gradient |
+| Fixed color | White |
+| Decimals | 3 (also used in the table and legend) |
+
+**Spheres**
+
+| Setting | Default |
+| :--- | :--- |
+| Show a sphere at ring centers | Off |
+| Coloring | HOMA gradient, or fixed color |
+| Fixed color | `#3070ff` |
+| Radius | 0.30 Å |
+| Opacity | 60 % |
+
+**Gradient**
+
+Labels and spheres that use the gradient share one colormap and range, so one legend describes
+both.
+
+| Setting | Default |
+| :--- | :--- |
+| Colormap | `coolwarm` (blue at the minimum, red at the maximum); the Mapped Cube Viewer's list |
+| Range | 0 to 1. **Fit to rings** stretches it over the current values; **0 to 1** restores it. Values outside the range take the end colors. |
+| Show legend | On, while anything uses the gradient |
+| Legend title | HOMA |
+| Orientation | Vertical |
+| Tick labels | 5 |
+| Legend font size | 14 pt |
+| Legend text color | `#202020` |
+
+Selected rings are traced with a yellow tube along their bonds.
 
 ## Geometry warning
 
@@ -96,7 +138,9 @@ alternation. For rings with mixed bond types, EN and GEO are left empty.
 
 The formula, every parameter, the EN/GEO split and the citations below were checked independently
 against the literature and Crossref DOI records. The test suite reproduces the published value
-for benzene with all C–C bonds at 1.397 Å: HOMA 0.979, EN 0.021, GEO 0.000 ([3], Table 4).
+for benzene with all C–C bonds at 1.397 Å: HOMA 0.979, EN 0.021, GEO 0.000 ([3], Table 4). It also
+checks a B3LYP/def2-SVP benzene geometry from an ORCA optimization (all C–C 1.3991 Å), which gives
+HOMA 0.968, EN 0.032 and GEO 0.000.
 
 ### References
 
@@ -121,7 +165,8 @@ the reason for the [geometry warning](#geometry-warning).
 ## Installation
 
 Install it from the Plugin Installer in MoleditPy, or copy the `homa_analyzer` folder into the
-MoleditPy plugin directory. It needs no packages beyond MoleditPy itself.
+MoleditPy plugin directory. It needs no packages beyond MoleditPy itself
+(NumPy, PySide6, PyVista and RDKit).
 
 ## Development
 
@@ -129,7 +174,7 @@ MoleditPy plugin directory. It needs no packages beyond MoleditPy itself.
 python -m pytest tests -v
 ```
 
-The tests use RDKit and PySide6 (offscreen). The API test checks every host access against the
+The tests use RDKit, PySide6 (offscreen) and PyVista. The API test checks every host access against the
 MoleditPy source when `python_molecular_editor` is checked out next to this repository.
 
 ## License

@@ -40,7 +40,7 @@ COLOR_MODES = ("fixed", "gradient")
 DEFAULTS = {
     "show_labels": True,
     "label_color_mode": "fixed",
-    "label_color": "#d03000",
+    "label_color": "#ffffff",
     "font_family": "Arial",
     "font_size": 18,
     "bold": True,
