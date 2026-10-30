@@ -167,3 +167,42 @@ def test_orca_optimized_benzene():
     assert round(ring.homa, 3) == 0.968
     assert round(ring.en, 3) == 0.032 and round(ring.geo, 6) == 0.0
     assert ring.center == pytest.approx((0.0, 0.0, 0.0), abs=1e-5)
+
+
+def test_bond_rows_add_up_to_homa():
+    coords = [
+        (0, 0, 0),
+        (1.34, 0, 0),
+        (2.0, 1.2, 0),
+        (1.4, 2.4, 0),
+        (0, 2.4, 0),
+        (-0.7, 1.2, 0),
+    ]
+    value, _en, _geo, lengths, _ = homa.ring_homa(["C"] * 6, coords)
+    ring = homa.RingResult(
+        index=1,
+        atoms=list(range(6)),
+        symbols=["C"] * 6,
+        lengths=lengths,
+        center=(0, 0, 0),
+        homa=value,
+    )
+    rows = homa.bond_rows([ring])
+    assert rows[0] == homa.BOND_CSV_HEADER and len(rows) == 7
+    assert rows[1][:5] == ["1", "1", "C1", "C2", "C-C"]
+    assert rows[6][2:4] == ["C6", "C1"]  # the closing bond
+    assert float(rows[1][5]) == pytest.approx(1.34, abs=1e-4)
+    assert 1 - sum(float(r[8]) for r in rows[1:]) == pytest.approx(value, abs=1e-4)
+
+
+def test_bond_rows_leave_unparameterized_bonds_blank():
+    ring = homa.RingResult(
+        index=2,
+        atoms=[0, 1, 2],
+        symbols=["C", "Si", "C"],
+        lengths=[1.9, 1.9, 1.5],
+        center=(0, 0, 0),
+    )
+    rows = homa.bond_rows([ring])
+    assert rows[1][4] == "C-Si" and rows[1][6:] == ["", "", ""]
+    assert rows[3][4] == "C-C" and rows[3][7] == "257.7"

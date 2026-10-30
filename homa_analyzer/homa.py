@@ -197,3 +197,48 @@ def csv_rows(results: Sequence[RingResult]) -> list[list[str]]:
             ]
         )
     return rows
+
+
+BOND_CSV_HEADER = [
+    "Ring",
+    "Bond",
+    "Atom 1",
+    "Atom 2",
+    "Type",
+    "Length (A)",
+    "R_opt (A)",
+    "alpha",
+    "alpha*(R_opt-R)^2/n",
+]
+
+
+def bond_rows(results: Sequence[RingResult]) -> list[list[str]]:
+    """One row per ring bond, with its share of the HOMA deviation sum."""
+    rows = [list(BOND_CSV_HEADER)]
+    for r in results:
+        n = r.size
+        for k in range(n):
+            a, b = r.atoms[k], r.atoms[(k + 1) % n]
+            sa, sb = r.symbols[k], r.symbols[(k + 1) % n]
+            length = r.lengths[k]
+            params = PARAMETERS.get(bond_key(sa, sb))
+            if params is None:
+                alpha = r_opt = term = ""
+            else:
+                alpha = f"{params[0]:g}"
+                r_opt = f"{params[1]:.3f}"
+                term = f"{params[0] * (params[1] - length) ** 2 / n:.5f}"
+            rows.append(
+                [
+                    str(r.index),
+                    str(k + 1),
+                    f"{sa}{a + 1}",
+                    f"{sb}{b + 1}",
+                    f"{sa}-{sb}",
+                    f"{length:.4f}",
+                    r_opt,
+                    alpha,
+                    term,
+                ]
+            )
+    return rows

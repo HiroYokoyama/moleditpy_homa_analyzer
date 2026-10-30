@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import overlay
-from .homa import analyze_mol, csv_rows, geometry_warning
+from .homa import analyze_mol, bond_rows, csv_rows, geometry_warning
 from .settings import COLORMAPS
 
 logger = logging.getLogger(__name__)
@@ -102,8 +102,15 @@ class HomaPanel(QWidget):
         self.refresh_button.clicked.connect(self.refresh)
         self.export_button = QPushButton("Export CSV...")
         self.export_button.clicked.connect(self.export_csv)
+        self.export_bonds_button = QPushButton("Export bond lengths...")
+        self.export_bonds_button.setToolTip(
+            "One row per ring bond, for the selected rings or, with none "
+            "selected, for every ring"
+        )
+        self.export_bonds_button.clicked.connect(self.export_bonds)
         buttons.addWidget(self.refresh_button)
         buttons.addWidget(self.export_button)
+        buttons.addWidget(self.export_bonds_button)
         layout.addLayout(buttons)
 
         self.tabs = QTabWidget()
@@ -592,7 +599,34 @@ class HomaPanel(QWidget):
             path += ".csv"
         return self.write_csv(path)
 
-    def write_csv(self, path: str) -> bool:
+    def selected_results(self):
+        """Rings selected in the table, or every ring when none is selected."""
+        rows = sorted({i.row() for i in self.table.selectedIndexes()})
+        if not rows:
+            return list(self.results)
+        return [self.results[r] for r in rows if r < len(self.results)]
+
+    def export_bonds(self) -> bool:
+        rings = self.selected_results()
+        if not rings:
+            QMessageBox.information(
+                self, "HOMA Analyzer", "There are no rings to export."
+            )
+            return False
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Bond Lengths",
+            "homa_bonds.csv",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not path:
+            return False
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        return self.write_csv(path, bond_rows(rings))
+
+    def write_csv(self, path: str, rows=None) -> bool:
+        """Write the ring list, or the given ``rows``, under the geometry notes."""
         try:
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
@@ -600,7 +634,7 @@ class HomaPanel(QWidget):
                 warning = geometry_warning(self.method)
                 if warning:
                     writer.writerow(["# Warning", warning])
-                writer.writerows(csv_rows(self.results))
+                writer.writerows(rows if rows is not None else csv_rows(self.results))
         except OSError as exc:
             QMessageBox.warning(
                 self, "HOMA Analyzer", f"Could not write {path}:\n{exc}"

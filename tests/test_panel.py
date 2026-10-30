@@ -348,3 +348,33 @@ def test_metadata():
     assert homa_analyzer.PLUGIN_VERSION == "0.1.0"
     assert homa_analyzer.PLUGIN_CATEGORY == "Analysis"
     assert "numpy" in homa_analyzer.PLUGIN_DEPENDENCIES
+
+
+def test_bond_export_all_or_selected(make_panel, tmp_path, monkeypatch):
+    p, _ = make_panel(_embed("c1ccc2[nH]ccc2c1"), "GFN2-xTB")
+    p.refresh()
+    sizes = [r.size for r in p.results]
+    target = tmp_path / "bonds"
+    monkeypatch.setattr(
+        panel_mod.QFileDialog,
+        "getSaveFileName",
+        staticmethod(lambda *a, **k: (str(target), "")),
+    )
+    assert p.export_bonds()
+    rows = list(csv.reader((tmp_path / "bonds.csv").open(encoding="utf-8")))
+    assert rows[0][0] == "# Last optimization" and rows[1][0] == "Ring"
+    assert len(rows) - 2 == sum(sizes)
+    p.table.selectRow(1)
+    assert p.export_bonds()
+    rows = list(csv.reader((tmp_path / "bonds.csv").open(encoding="utf-8")))
+    assert len(rows) - 2 == sizes[1]
+    assert {r[0] for r in rows[2:]} == {str(p.results[1].index)}
+
+
+def test_bond_export_without_rings(make_panel, monkeypatch):
+    shown = []
+    monkeypatch.setattr(
+        panel_mod.QMessageBox, "information", staticmethod(lambda *a: shown.append(a))
+    )
+    p, _ = make_panel(None)
+    assert not p.export_bonds() and shown
