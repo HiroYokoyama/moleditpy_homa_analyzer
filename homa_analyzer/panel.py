@@ -32,6 +32,8 @@ from .settings import FONT_FAMILIES
 logger = logging.getLogger(__name__)
 
 LABEL_ACTOR = "homa_analyzer_ring_labels"
+# add_point_labels(name=...) registers its actors under these suffixed names.
+LABEL_ACTOR_NAMES = (f"{LABEL_ACTOR}-labels", f"{LABEL_ACTOR}-points")
 POLL_MS = 800
 COLUMNS = ["Ring", "Atoms", "Size", "HOMA", "EN", "GEO"]
 
@@ -247,7 +249,8 @@ class HomaPanel(QWidget):
         if plotter is None:
             return
         try:
-            plotter.remove_actor(LABEL_ACTOR)
+            for name in LABEL_ACTOR_NAMES:
+                plotter.remove_actor(name)
             if render:
                 plotter.render()
         except Exception:
@@ -284,7 +287,7 @@ class HomaPanel(QWidget):
         actors = getattr(plotter, "actors", None)
         if actors is None:
             return False
-        return LABEL_ACTOR not in actors
+        return LABEL_ACTOR_NAMES[0] not in actors
 
     def _poll(self) -> None:
         """The host clears the plotter on every redraw; recompute and relabel then."""

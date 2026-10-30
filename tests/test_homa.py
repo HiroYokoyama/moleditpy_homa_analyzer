@@ -147,3 +147,23 @@ class TestWithRDKit:
         rows = homa.csv_rows(results)
         assert rows[0] == homa.CSV_HEADER
         assert rows[1][4].startswith("n/a (C-Si")
+
+
+def test_orca_optimized_benzene():
+    """B3LYP/def2-SVP benzene from an ORCA optimization: every C-C is 1.3991 A."""
+    rdkit = pytest.importorskip("rdkit")
+    from pathlib import Path
+
+    from rdkit import Chem
+    from rdkit.Chem import rdDetermineBonds
+
+    del rdkit
+    path = Path(__file__).parent / "data" / "benzene_b3lyp_def2svp.xyz"
+    mol = Chem.MolFromXYZFile(str(path))
+    rdDetermineBonds.DetermineBonds(mol, charge=0)
+    (ring,) = homa.analyze_mol(mol)
+    assert ring.size == 6 and ring.aromatic and ring.label == "CCCCCC"
+    assert ring.lengths == pytest.approx([1.3991] * 6, abs=5e-5)
+    assert round(ring.homa, 3) == 0.968
+    assert round(ring.en, 3) == 0.032 and round(ring.geo, 6) == 0.0
+    assert ring.center == pytest.approx((0.0, 0.0, 0.0), abs=1e-5)

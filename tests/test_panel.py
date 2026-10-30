@@ -15,13 +15,16 @@ from homa_analyzer.settings import default_settings
 
 
 class FakePlotter:
+    """Names actors the way pyvista's add_point_labels does."""
+
     def __init__(self):
         self.actors = {}
         self.calls = []
 
     def add_point_labels(self, points, labels, name=None, **kwargs):
         self.calls.append(SimpleNamespace(points=points, labels=labels, kwargs=kwargs))
-        self.actors[name] = object()
+        self.actors[f"{name}-points"] = object()
+        self.actors[f"{name}-labels"] = object()
 
     def remove_actor(self, name):
         self.actors.pop(name, None)
@@ -124,7 +127,7 @@ def test_label_settings_redraw_and_save(make_panel):
     assert len(p.table.item(0, 3).text().split(".")[1]) == 2
     assert saved[-1]["decimals"] == 2
     p.show_check.setChecked(False)
-    assert panel_mod.LABEL_ACTOR not in ctx.plotter.actors
+    assert not set(panel_mod.LABEL_ACTOR_NAMES) & set(ctx.plotter.actors)
 
 
 def test_poll_relabels_after_host_redraw(make_panel):
@@ -133,7 +136,7 @@ def test_poll_relabels_after_host_redraw(make_panel):
     p.refresh()
     ctx.plotter.actors.clear()  # the host's plotter.clear() on redraw
     p._poll()
-    assert panel_mod.LABEL_ACTOR in ctx.plotter.actors
+    assert panel_mod.LABEL_ACTOR_NAMES[0] in ctx.plotter.actors
     n = len(ctx.plotter.calls)
     p._poll()  # nothing changed: no work
     assert len(ctx.plotter.calls) == n
@@ -165,7 +168,7 @@ def test_shutdown_removes_labels(make_panel):
     p, ctx = make_panel(_benzene())
     p.refresh()
     p.shutdown()
-    assert panel_mod.LABEL_ACTOR not in ctx.plotter.actors
+    assert not set(panel_mod.LABEL_ACTOR_NAMES) & set(ctx.plotter.actors)
     assert not p.timer.isActive()
 
 
