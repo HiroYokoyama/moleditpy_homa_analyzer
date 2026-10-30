@@ -1,4 +1,4 @@
-"""3D-view overlays: Qt-drawn value labels and ring-center spheres.
+"""3D-view overlays: Qt-drawn value labels, ring-center spheres, HOMA colors.
 
 VTK text supports only three font families and no underline, so each label is
 drawn with QPainter (any installed font, bold/italic/underline) and shown as a
@@ -15,6 +15,22 @@ from vtkmodules.vtkRenderingCore import vtkActor2D, vtkCoordinate, vtkImageMappe
 
 PAD = 3
 PX_PER_PT = 96 / 72
+SCALARS = "HOMA"
+
+
+def colormap(name: str):
+    """The named matplotlib colormap, as pyvista resolves it."""
+    from pyvista.plotting.colors import get_cmap_safe
+
+    return get_cmap_safe(name)
+
+
+def value_color(value: float, settings: dict) -> str:
+    """Hex color of ``value`` on the gradient; values outside the range clip."""
+    lo, hi = settings["range_min"], settings["range_max"]
+    t = min(max((value - lo) / (hi - lo), 0.0), 1.0)
+    r, g, b = colormap(settings["colormap"])(t)[:3]
+    return "#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in (r, g, b)))
 
 
 def label_font(settings: dict, scale: float = 1.0) -> QFont:
@@ -26,7 +42,7 @@ def label_font(settings: dict, scale: float = 1.0) -> QFont:
     return font
 
 
-def render_label(text: str, settings: dict, scale: float = 1.0) -> np.ndarray:
+def render_label(text: str, color: str, settings: dict, scale: float = 1.0):
     """RGBA pixels of ``text``, bottom row first (VTK's image order)."""
     font = label_font(settings, scale)
     metrics = QFontMetrics(font)
@@ -39,7 +55,7 @@ def render_label(text: str, settings: dict, scale: float = 1.0) -> np.ndarray:
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
     painter.setFont(font)
-    painter.setPen(QColor(settings["label_color"]))
+    painter.setPen(QColor(color))
     painter.drawText(PAD, PAD + metrics.ascent(), text)
     painter.end()
     rows = np.frombuffer(image.constBits(), np.uint8).reshape(
@@ -48,7 +64,7 @@ def render_label(text: str, settings: dict, scale: float = 1.0) -> np.ndarray:
     return np.ascontiguousarray(rows[::-1, :width])
 
 
-def label_actor(position, pixels: np.ndarray) -> vtkActor2D:
+def label_actor(position, pixels) -> vtkActor2D:
     """A 2D actor showing ``pixels`` centered on the world point ``position``."""
     height, width = pixels.shape[:2]
     data = vtkImageData()
@@ -72,15 +88,50 @@ def label_actor(position, pixels: np.ndarray) -> vtkActor2D:
     return actor
 
 
-def sphere_mesh(centers, radius: float):
-    """One mesh holding a sphere at each ring center."""
+def sphere_mesh(centers, radius: float, values=None):
+    """One mesh holding a sphere at each ring center, carrying its HOMA value."""
     import pyvista as pv
 
-    spheres = [
-        pv.Sphere(radius=radius, center=c, theta_resolution=24, phi_resolution=24)
-        for c in centers
-    ]
+    spheres = []
+    for i, center in enumerate(centers):
+        s = pv.Sphere(
+            radius=radius, center=center, theta_resolution=24, phi_resolution=24
+        )
+        if values is not None:
+            s.point_data[SCALARS] = np.full(s.n_points, values[i], dtype=float)
+        spheres.append(s)
     mesh = spheres[0]
     for s in spheres[1:]:
         mesh = mesh.merge(s)
     return mesh
+
+
+def legend_mesh(position, settings: dict):
+    """An invisible two-point mesh spanning the range, to carry the scalar bar."""
+    import pyvista as pv
+
+    mesh = pv.PolyData(np.array([position, position], dtype=float))
+    mesh.point_data[SCALARS] = np.array(
+        [settings["range_min"], settings["range_max"]], dtype=float
+    )
+    return mesh
+
+
+def legend_args(settings: dict) -> dict:
+    vertical = settings["legend_vertical"]
+    args = {
+        "title": settings["legend_title"],
+        "vertical": vertical,
+        "n_labels": settings["legend_labels"],
+        "fmt": f"%.{settings['decimals']}f",
+        "title_font_size": settings["legend_font_size"] + 2,
+        "label_font_size": settings["legend_font_size"],
+        "color": settings["legend_color"],
+        "italic": False,
+        "bold": False,
+    }
+    if vertical:
+        args.update(position_x=0.88, position_y=0.25, width=0.08, height=0.5)
+    else:
+        args.update(position_x=0.3, position_y=0.04, width=0.4, height=0.08)
+    return args

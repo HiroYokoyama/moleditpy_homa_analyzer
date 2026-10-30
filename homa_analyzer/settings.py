@@ -139,7 +139,10 @@ def sanitize(data) -> dict:
             except (KeyError, TypeError, ValueError):
                 pass
     if out["range_min"] >= out["range_max"]:
-        out["range_min"], out["range_max"] = DEFAULTS["range_min"], DEFAULTS["range_max"]
+        out["range_min"], out["range_max"] = (
+            DEFAULTS["range_min"],
+            DEFAULTS["range_max"],
+        )
     return out
 
 

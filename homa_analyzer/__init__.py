@@ -1,9 +1,10 @@
 """HOMA Analyzer - ring aromaticity (HOMA) of the MoleditPy 3D structure.
 
 Analysis > "HOMA Analyzer" opens a dock on the right listing the HOMA index of
-every ring, with the EN/GEO split for rings of one bond type, labels each ring
-center in the 3D view, and exports the list as CSV.  Label color, font, size
-and precision are set in the dock.  A warning appears when the structure was
+every ring, with the EN/GEO split for rings of one bond type, and exports the
+list as CSV.  In the 3D view each ring center gets its value as a label and,
+optionally, a sphere; both can be colored by HOMA on a gradient with a legend.
+Fonts, colors, sizes and the gradient are set in the dock.  A warning appears when the structure was
 last optimized with a force field, whose bond lengths do not suit HOMA.
 
 Source code, README, and full license (GNU GPL):
@@ -17,7 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = "HOMA Analyzer"
-PLUGIN_VERSION = "0.0.1"
+PLUGIN_VERSION = "0.1.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Compute the HOMA aromaticity index of each ring in the 3D structure, "
@@ -25,7 +26,7 @@ PLUGIN_DESCRIPTION = (
 )
 PLUGIN_CATEGORY = "Analysis"
 PLUGIN_TAGS = ["Analysis", "Visualization"]
-PLUGIN_DEPENDENCIES = ["PySide6-Essentials", "pyvista", "rdkit"]
+PLUGIN_DEPENDENCIES = ["numpy", "PySide6-Essentials", "pyvista", "rdkit"]
 PLUGIN_OPTIONAL_DEPENDENCIES = []
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=5.0.0, <6.0.0"
 PLUGIN_SUPPORTED_PYTHON_VERSION = ">=3.9, <3.15"
@@ -47,12 +48,15 @@ def _settings() -> dict:
 
 def open_panel(*_args):
     """Analysis-menu action: show the dock (one at a time) and analyze."""
+    import shiboken6
     from PySide6.QtCore import Qt
 
     from .panel import HomaDock, HomaPanel
     from .settings import save_settings
 
     existing = _context.get_window(WINDOW_ID)
+    if existing is not None and not shiboken6.isValid(existing):
+        existing = None  # deleted behind our back; build a new one
     if existing is not None:
         existing.show()
         existing.raise_()

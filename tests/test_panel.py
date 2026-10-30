@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip("PySide6")
+pytest.importorskip("pyvista")
 Chem = pytest.importorskip("rdkit.Chem")
 from rdkit.Chem import AllChem
 
@@ -15,19 +16,36 @@ from homa_analyzer.settings import default_settings
 
 
 class FakePlotter:
-    """Names actors the way pyvista's add_point_labels does."""
+    """Records what the panel adds; like pyvista, a scalar bar is keyed by title."""
 
     def __init__(self):
         self.actors = {}
-        self.calls = []
+        self.meshes = {}
+        self.scalar_bars = {}
 
-    def add_point_labels(self, points, labels, name=None, **kwargs):
-        self.calls.append(SimpleNamespace(points=points, labels=labels, kwargs=kwargs))
-        self.actors[f"{name}-points"] = object()
-        self.actors[f"{name}-labels"] = object()
+    def add_actor(self, actor, name=None, **kwargs):
+        self.actors[name] = actor
+
+    def add_mesh(self, mesh, name=None, **kwargs):
+        self.actors[name] = object()
+        self.meshes[name] = SimpleNamespace(mesh=mesh, kwargs=kwargs)
+        if kwargs.get("show_scalar_bar"):
+            title = kwargs["scalar_bar_args"]["title"]
+            if title in self.scalar_bars:
+                raise ValueError("duplicate scalar bar")  # what pyvista would do
+            self.scalar_bars[title] = kwargs["scalar_bar_args"]
 
     def remove_actor(self, name):
         self.actors.pop(name, None)
+        self.meshes.pop(name, None)
+
+    def remove_scalar_bar(self, title):
+        del self.scalar_bars[title]
+
+    def clear(self):
+        self.actors.clear()
+        self.meshes.clear()
+        self.scalar_bars.clear()
 
     def render(self):
         pass
@@ -56,20 +74,30 @@ class FakeContext:
         self.windows[wid] = w
 
 
-def _benzene():
-    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))
+def _embed(smiles):
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
     AllChem.EmbedMolecule(mol, randomSeed=3)
     AllChem.MMFFOptimizeMolecule(mol)
     return mol
+
+
+def _benzene():
+    return _embed("c1ccccc1")
+
+
+def _labels(plotter):
+    return sorted(n for n in plotter.actors if n.startswith(panel_mod.LABEL_ACTOR))
 
 
 @pytest.fixture
 def make_panel(qapp):
     made = []
 
-    def make(mol=None, method=None, settings=None):
+    def make(mol=None, method=None, **overrides):
         ctx = FakeContext(mol, method)
-        p = panel_mod.HomaPanel(ctx, settings or default_settings())
+        settings = default_settings()
+        settings.update(overrides)
+        p = panel_mod.HomaPanel(ctx, settings)
         made.append(p)
         return p, ctx
 
@@ -84,11 +112,18 @@ def test_refresh_fills_table_and_labels(make_panel):
     p.refresh()
     assert p.table.rowCount() == 1
     assert p.table.item(0, 2).text() == "6"
-    (call,) = ctx.plotter.calls
-    assert len(call.points) == 1 and call.labels[0] == p.table.item(0, 3).text()
-    assert call.kwargs["text_color"] == "#d03000"
-    assert call.kwargs["font_family"] == "arial" and call.kwargs["font_size"] == 18
+    assert _labels(ctx.plotter) == [f"{panel_mod.LABEL_ACTOR}-1"]
+    assert p.label_texts() == [p.table.item(0, 3).text()]
+    assert p.label_colors() == ["#d03000"]
+    assert panel_mod.SPHERE_ACTOR not in ctx.plotter.actors  # off by default
+    assert not ctx.plotter.scalar_bars  # fixed label color: no legend
     assert p.warning_label.isHidden()
+
+
+def test_one_label_per_ring(make_panel):
+    p, ctx = make_panel(_embed("c1ccc2ccccc2c1"))
+    p.refresh()
+    assert len(_labels(ctx.plotter)) == 2
 
 
 def test_force_field_geometry_shows_warning(make_panel):
@@ -98,13 +133,13 @@ def test_force_field_geometry_shows_warning(make_panel):
     assert "MMFF94s (RDKit)" in p.warning_label.text()
 
 
-def test_no_warning_without_rings(make_panel):
+def test_no_warning_and_no_overlay_without_rings(make_panel):
     mol = Chem.AddHs(Chem.MolFromSmiles("CCO"))
     AllChem.EmbedMolecule(mol, randomSeed=1)
-    p, ctx = make_panel(mol, "UFF (RDKit)")
+    p, ctx = make_panel(mol, "UFF (RDKit)", show_spheres=True)
     p.refresh()
     assert p.table.rowCount() == 0 and "no rings" in p.status_label.text()
-    assert p.warning_label.isHidden() and ctx.plotter.calls == []
+    assert p.warning_label.isHidden() and ctx.plotter.actors == {}
 
 
 def test_no_3d_structure(make_panel):
@@ -118,28 +153,124 @@ def test_label_settings_redraw_and_save(make_panel):
     p, ctx = make_panel(_benzene())
     p.on_settings_change = lambda s: saved.append(dict(s))
     p.refresh()
+    first = ctx.plotter.actors[f"{panel_mod.LABEL_ACTOR}-1"]
     p.size_spin.setValue(30)
-    p.font_combo.setCurrentIndex(2)
+    p.italic_button.setChecked(True)
+    p.underline_button.setChecked(True)
     p.decimals_spin.setValue(2)
-    last = ctx.plotter.calls[-1]
-    assert last.kwargs["font_size"] == 30 and last.kwargs["font_family"] == "times"
-    assert len(last.labels[0].split(".")[1]) == 2
+    assert ctx.plotter.actors[f"{panel_mod.LABEL_ACTOR}-1"] is not first
+    assert saved[-1]["font_size"] == 30
+    assert saved[-1]["italic"] is True and saved[-1]["underline"] is True
+    assert len(p.label_texts()[0].split(".")[1]) == 2
     assert len(p.table.item(0, 3).text().split(".")[1]) == 2
-    assert saved[-1]["decimals"] == 2
     p.show_check.setChecked(False)
-    assert not set(panel_mod.LABEL_ACTOR_NAMES) & set(ctx.plotter.actors)
+    assert _labels(ctx.plotter) == []
 
 
-def test_poll_relabels_after_host_redraw(make_panel):
-    p, ctx = make_panel(_benzene())
+def test_font_family_from_the_combo(make_panel):
+    from PySide6.QtGui import QFont
+
+    p, _ = make_panel(_benzene())
+    p.font_combo.setCurrentFont(QFont("Courier New"))
+    assert p.settings["font_family"] == p.font_combo.currentFont().family()
+
+
+def test_style_buttons_reflect_settings(make_panel):
+    p, _ = make_panel(_benzene(), bold=False, italic=True, underline=True)
+    assert not p.bold_button.isChecked()
+    assert p.italic_button.isChecked() and p.underline_button.isChecked()
+    assert p.underline_button.font().underline()
+
+
+def test_fixed_color_spheres(make_panel):
+    p, ctx = make_panel(_benzene(), show_spheres=True, sphere_color_mode="fixed")
+    p.refresh()
+    sphere = ctx.plotter.meshes[panel_mod.SPHERE_ACTOR]
+    assert sphere.kwargs["color"] == "#3070ff"
+    assert sphere.kwargs["opacity"] == 0.6
+    assert "scalars" not in sphere.kwargs
+    assert not ctx.plotter.scalar_bars
+
+
+def test_gradient_spheres_and_legend(make_panel):
+    p, ctx = make_panel(_embed("c1ccc2ccccc2c1"), show_spheres=True)
+    p.refresh()
+    sphere = ctx.plotter.meshes[panel_mod.SPHERE_ACTOR]
+    assert sphere.kwargs["scalars"] == "HOMA" and sphere.kwargs["cmap"] == "coolwarm"
+    assert sphere.kwargs["clim"] == [0.0, 1.0]
+    values = set(sphere.mesh.point_data["HOMA"].round(6))
+    assert values == {round(r.homa, 6) for r in p.results}
+    assert list(ctx.plotter.scalar_bars) == ["HOMA"]
+
+
+def test_gradient_label_colors_follow_the_value(make_panel):
+    p, ctx = make_panel(_benzene(), label_color_mode="gradient")
+    p.refresh()
+    p.set_range(-10.0, -9.0)  # benzene far above the range: top color
+    top = p.label_colors()[0]
+    p.set_range(1.5, 2.0)  # far below: bottom color
+    assert p.label_colors()[0] != top
+    assert list(ctx.plotter.scalar_bars) == ["HOMA"]
+
+
+def test_legend_settings(make_panel):
+    p, ctx = make_panel(_benzene(), show_spheres=True)
+    p.refresh()
+    p.legend_title_edit.setText("HOMA index")
+    p._legend_title_changed()
+    p.orientation_combo.setCurrentIndex(1)
+    p.legend_labels_spin.setValue(3)
+    p.legend_size_spin.setValue(20)
+    (args,) = ctx.plotter.scalar_bars.values()
+    assert args["title"] == "HOMA index" and args["vertical"] is False
+    assert args["n_labels"] == 3 and args["label_font_size"] == 20
+    p.legend_check.setChecked(False)
+    assert not ctx.plotter.scalar_bars
+
+
+def test_empty_legend_title_falls_back(make_panel):
+    p, _ = make_panel(_benzene())
+    p.legend_title_edit.setText("   ")
+    p._legend_title_changed()
+    assert p.settings["legend_title"] == "HOMA"
+
+
+def test_fit_range_and_reset(make_panel):
+    p, _ = make_panel(_embed("c1ccc2[nH]ccc2c1"), label_color_mode="gradient")
+    p.refresh()
+    p.fit_button.click()
+    values = [r.homa for r in p.results]
+    assert p.settings["range_min"] == pytest.approx(min(values), abs=1e-3)
+    assert p.settings["range_max"] == pytest.approx(max(values), abs=1e-3)
+    p.reset_range_button.click()
+    assert (p.settings["range_min"], p.settings["range_max"]) == (0.0, 1.0)
+
+
+def test_fit_range_widens_a_single_value(make_panel):
+    p, _ = make_panel(_benzene())
+    p.refresh()
+    p.fit_range()
+    assert p.settings["range_max"] - p.settings["range_min"] == pytest.approx(0.1)
+
+
+def test_inverted_range_is_refused(make_panel):
+    p, _ = make_panel(_benzene())
+    p.min_spin.setValue(1.5)
+    assert (p.settings["range_min"], p.settings["range_max"]) == (0.0, 1.0)
+    assert "minimum" in p.status_label.text()
+
+
+def test_poll_redraws_after_host_clear(make_panel):
+    p, ctx = make_panel(_benzene(), show_spheres=True)
     p.show()
     p.refresh()
-    ctx.plotter.actors.clear()  # the host's plotter.clear() on redraw
+    ctx.plotter.clear()  # the host's plotter.clear() on redraw
     p._poll()
-    assert panel_mod.LABEL_ACTOR_NAMES[0] in ctx.plotter.actors
-    n = len(ctx.plotter.calls)
+    assert panel_mod.SPHERE_ACTOR in ctx.plotter.actors
+    assert _labels(ctx.plotter) and list(ctx.plotter.scalar_bars) == ["HOMA"]
+    actors = dict(ctx.plotter.actors)
     p._poll()  # nothing changed: no work
-    assert len(ctx.plotter.calls) == n
+    assert ctx.plotter.actors == actors
 
 
 def test_poll_notices_new_optimization(make_panel):
@@ -164,15 +295,15 @@ def test_write_csv(make_panel, tmp_path):
     assert ctx.messages
 
 
-def test_shutdown_removes_labels(make_panel):
-    p, ctx = make_panel(_benzene())
+def test_shutdown_removes_the_overlay(make_panel):
+    p, ctx = make_panel(_benzene(), show_spheres=True)
     p.refresh()
     p.shutdown()
-    assert not set(panel_mod.LABEL_ACTOR_NAMES) & set(ctx.plotter.actors)
+    assert ctx.plotter.actors == {} and not ctx.plotter.scalar_bars
     assert not p.timer.isActive()
 
 
-def test_initialize_and_open_panel(qapp, monkeypatch):
+def test_initialize_and_open_panel(qapp):
     from PySide6.QtWidgets import QMainWindow
 
     mw = QMainWindow()
@@ -193,6 +324,27 @@ def test_initialize_and_open_panel(qapp, monkeypatch):
     mw.deleteLater()
 
 
+def test_open_panel_replaces_a_deleted_dock(qapp):
+    import shiboken6
+    from PySide6.QtWidgets import QMainWindow
+
+    mw = QMainWindow()
+    ctx = FakeContext(_benzene())
+    ctx.mw = mw
+    mw.compute_manager = SimpleNamespace(last_successful_optimization_method=None)
+    ctx.add_analysis_tool = lambda *a: None
+    ctx.register_document_reset_handler = lambda *a: None
+    homa_analyzer.initialize(ctx)
+    old = homa_analyzer.open_panel()
+    old.panel.shutdown()
+    shiboken6.delete(old)
+    new = homa_analyzer.open_panel()
+    assert shiboken6.isValid(new) and new is not old
+    new.panel.shutdown()
+    mw.deleteLater()
+
+
 def test_metadata():
-    assert homa_analyzer.PLUGIN_VERSION == "0.0.1"
+    assert homa_analyzer.PLUGIN_VERSION == "0.1.0"
     assert homa_analyzer.PLUGIN_CATEGORY == "Analysis"
+    assert "numpy" in homa_analyzer.PLUGIN_DEPENDENCIES
