@@ -11,6 +11,8 @@ Source code, README, and full license (GNU GPL):
     https://github.com/HiroYokoyama/moleditpy_homa_analyzer
 Copyright (c) HiroYokoyama. Licensed under the GNU Lesser General Public License;
 see the LICENSE file in the repository above for the full terms.
+
+DOI: 10.5281/zenodo.23835923
 """
 
 import logging
@@ -18,7 +20,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = "HOMA Analyzer"
-PLUGIN_VERSION = "0.1.3"
+PLUGIN_VERSION = "0.1.4"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Compute the HOMA aromaticity index of each ring in the 3D structure, "
