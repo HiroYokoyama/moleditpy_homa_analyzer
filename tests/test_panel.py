@@ -355,7 +355,7 @@ def test_open_panel_replaces_a_deleted_dock(qapp):
 
 
 def test_metadata():
-    assert homa_analyzer.PLUGIN_VERSION == "0.1.2"
+    assert homa_analyzer.PLUGIN_VERSION == "0.1.3"
     assert homa_analyzer.PLUGIN_CATEGORY == "Analysis"
     assert "numpy" in homa_analyzer.PLUGIN_DEPENDENCIES
 
